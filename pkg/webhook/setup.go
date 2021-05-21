@@ -1,7 +1,6 @@
 // Copyright (c) 2020 Red Hat, Inc.
 // Copyright Contributors to the Open Cluster Management project
 
-
 package webhook
 
 import (
@@ -59,55 +58,47 @@ func Setup(mgr manager.Manager) error {
 	validatingPath := "/validate-v1-multiclusterhub"
 	hookServer.Register(validatingPath, &webhook.Admission{Handler: &multiClusterHubValidator{}})
 
-	go createWebhookService(mgr.GetClient(), ns)
-	go createOrUpdateValiatingWebhook(mgr.GetClient(), ns, validatingPath, ca)
-
-	return nil
-}
-
-func createWebhookService(c client.Client, namespace string) {
+	c := mgr.GetClient()
 	service := &corev1.Service{}
-	key := types.NamespacedName{Name: utils.WebhookServiceName, Namespace: namespace}
+	key := types.NamespacedName{Name: utils.WebhookServiceName, Namespace: ns}
 	for {
 		if err := c.Get(context.TODO(), key, service); err != nil {
 			if errors.IsNotFound(err) {
-				service := newWebhookService(namespace)
-				setOwnerReferences(c, namespace, service)
+				service := newWebhookService(ns)
+				setOwnerReferences(c, ns, service)
 				if err := c.Create(context.TODO(), service); err != nil {
-					log.Error(err, fmt.Sprintf("Failed to create %s/%s service", namespace, utils.WebhookServiceName))
-					return
+					log.Error(err, fmt.Sprintf("Failed to create %s/%s service", ns, utils.WebhookServiceName))
+					break
 				}
-				log.Info(fmt.Sprintf("Create %s/%s service", namespace, utils.WebhookServiceName))
-				return
+				log.Info(fmt.Sprintf("Create %s/%s service", ns, utils.WebhookServiceName))
+				break
 			}
 			switch err.(type) {
 			case *cache.ErrCacheNotStarted:
 				time.Sleep(time.Second)
 				continue
 			default:
-				log.Error(err, fmt.Sprintf("Failed to get %s/%s service", namespace, utils.WebhookServiceName))
-				return
+				log.Error(err, fmt.Sprintf("Failed to get %s/%s service", ns, utils.WebhookServiceName))
+				break
 			}
 		}
-		log.Info(fmt.Sprintf("%s/%s service is found", namespace, utils.WebhookServiceName))
-		return
+		log.Info(fmt.Sprintf("%s/%s service is found", ns, utils.WebhookServiceName))
+		break
 	}
-}
 
-func createOrUpdateValiatingWebhook(c client.Client, namespace, path string, ca []byte) {
 	validator := &admissionregistration.ValidatingWebhookConfiguration{}
-	key := types.NamespacedName{Name: validatingCfgName}
+	nextkey := types.NamespacedName{Name: validatingCfgName}
 	for {
-		if err := c.Get(context.TODO(), key, validator); err != nil {
+		if err := c.Get(context.TODO(), nextkey, validator); err != nil {
 			if errors.IsNotFound(err) {
-				cfg := newValidatingWebhookCfg(namespace, path, ca)
-				setOwnerReferences(c, namespace, cfg)
+				cfg := newValidatingWebhookCfg(ns, validatingPath, ca)
+				setOwnerReferences(c, ns, cfg)
 				if err := c.Create(context.TODO(), cfg); err != nil {
 					log.Error(err, fmt.Sprintf("Failed to create validating webhook %s", validatingCfgName))
-					return
+					break
 				}
 				log.Info(fmt.Sprintf("Create validating webhook %s", validatingCfgName))
-				return
+				break
 			}
 			switch err.(type) {
 			case *cache.ErrCacheNotStarted:
@@ -115,19 +106,88 @@ func createOrUpdateValiatingWebhook(c client.Client, namespace, path string, ca 
 				continue
 			default:
 				log.Error(err, fmt.Sprintf("Failed to get validating webhook %s", validatingCfgName))
-				return
+				break
 			}
 		}
 
-		validator.Webhooks[0].ClientConfig.Service.Namespace = namespace
+		validator.Webhooks[0].ClientConfig.Service.Namespace = ns
 		validator.Webhooks[0].ClientConfig.CABundle = ca
 		if err := c.Update(context.TODO(), validator); err != nil {
 			log.Error(err, fmt.Sprintf("Failed to update validating webhook %s", validatingCfgName))
-			return
+			break
 		}
 		log.Info(fmt.Sprintf("Update validating webhook %s", validatingCfgName))
-		return
+		break
 	}
+	// go createWebhookService(mgr.GetClient(), ns)
+	// go createOrUpdateValiatingWebhook(mgr.GetClient(), ns, validatingPath, ca)
+
+	return nil
+}
+
+func createWebhookService(c client.Client, namespace string) {
+	// service := &corev1.Service{}
+	// key := types.NamespacedName{Name: utils.WebhookServiceName, Namespace: namespace}
+	// for {
+	// 	if err := c.Get(context.TODO(), key, service); err != nil {
+	// 		if errors.IsNotFound(err) {
+	// 			service := newWebhookService(namespace)
+	// 			setOwnerReferences(c, namespace, service)
+	// 			if err := c.Create(context.TODO(), service); err != nil {
+	// 				log.Error(err, fmt.Sprintf("Failed to create %s/%s service", namespace, utils.WebhookServiceName))
+	// 				return
+	// 			}
+	// 			log.Info(fmt.Sprintf("Create %s/%s service", namespace, utils.WebhookServiceName))
+	// 			return
+	// 		}
+	// 		switch err.(type) {
+	// 		case *cache.ErrCacheNotStarted:
+	// 			time.Sleep(time.Second)
+	// 			continue
+	// 		default:
+	// 			log.Error(err, fmt.Sprintf("Failed to get %s/%s service", namespace, utils.WebhookServiceName))
+	// 			return
+	// 		}
+	// 	}
+	// 	log.Info(fmt.Sprintf("%s/%s service is found", namespace, utils.WebhookServiceName))
+	// 	return
+	// }
+}
+
+func createOrUpdateValiatingWebhook(c client.Client, namespace, path string, ca []byte) {
+	// validator := &admissionregistration.ValidatingWebhookConfiguration{}
+	// key := types.NamespacedName{Name: validatingCfgName}
+	// for {
+	// 	if err := c.Get(context.TODO(), key, validator); err != nil {
+	// 		if errors.IsNotFound(err) {
+	// 			cfg := newValidatingWebhookCfg(namespace, path, ca)
+	// 			setOwnerReferences(c, namespace, cfg)
+	// 			if err := c.Create(context.TODO(), cfg); err != nil {
+	// 				log.Error(err, fmt.Sprintf("Failed to create validating webhook %s", validatingCfgName))
+	// 				return
+	// 			}
+	// 			log.Info(fmt.Sprintf("Create validating webhook %s", validatingCfgName))
+	// 			return
+	// 		}
+	// 		switch err.(type) {
+	// 		case *cache.ErrCacheNotStarted:
+	// 			time.Sleep(time.Second)
+	// 			continue
+	// 		default:
+	// 			log.Error(err, fmt.Sprintf("Failed to get validating webhook %s", validatingCfgName))
+	// 			return
+	// 		}
+	// 	}
+
+	// 	validator.Webhooks[0].ClientConfig.Service.Namespace = namespace
+	// 	validator.Webhooks[0].ClientConfig.CABundle = ca
+	// 	if err := c.Update(context.TODO(), validator); err != nil {
+	// 		log.Error(err, fmt.Sprintf("Failed to update validating webhook %s", validatingCfgName))
+	// 		return
+	// 	}
+	// 	log.Info(fmt.Sprintf("Update validating webhook %s", validatingCfgName))
+	// 	return
+	// }
 }
 
 func setOwnerReferences(c client.Client, namespace string, obj metav1.Object) {
